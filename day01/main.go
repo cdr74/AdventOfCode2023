@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"time"
+
+	"github.com/cdr74/AdventOfCode2023/utils"
 )
 
 // the flag runTest defines which data file to read
@@ -13,31 +15,7 @@ const runTest bool = true
 const TEST_FILE string = "test.data"
 const DATA_FILE string = "actual.data"
 
-type Stopwatch struct {
-	startTime   time.Time
-	elapsedTime time.Duration
-	isRunning   bool
-}
-
-func NewStopwatch() *Stopwatch {
-	return &Stopwatch{
-		startTime:   time.Now(),
-		elapsedTime: 0,
-		isRunning:   false,
-	}
-}
-
-func (s *Stopwatch) Start() {
-	s.isRunning = true
-	s.startTime = time.Now()
-}
-
-func (s *Stopwatch) Stop() {
-	s.isRunning = false
-	s.elapsedTime = time.Since(s.startTime)
-}
-
-func readDataFile(filename string) []string {
+func ReadDataFile(filename string) []string {
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
@@ -60,26 +38,26 @@ func readDataFile(filename string) []string {
 	return lines
 }
 
-func solvePuzzle() string {
+func SolvePuzzle() string {
 	return "tbd"
 }
 
 func main() {
 	var result string
-	stopwatch := NewStopwatch()
+	stopwatch := utils.NewStopwatch()
 	stopwatch.Start()
 
 	if runTest {
-		readDataFile(TEST_FILE)
+		ReadDataFile(TEST_FILE)
 	} else {
-		readDataFile(DATA_FILE)
+		ReadDataFile(DATA_FILE)
 	}
 
-	result = solvePuzzle()
+	result = SolvePuzzle()
 	stopwatch.Stop()
 
 	// -------------------------------------
-	elapsedTime := stopwatch.elapsedTime
+	var elapsedTime time.Duration = stopwatch.GetElapsedTime()
 	fmt.Println("Running as test:\t", runTest)
 	fmt.Println("Result:\t\t\t", result)
 	fmt.Println("Elapsed time:\t\t", elapsedTime)
