@@ -6,13 +6,12 @@ import (
 	"regexp"
 	"strconv"
 	"time"
-	"unicode"
 
 	"github.com/cdr74/AdventOfCode2023/utils"
 )
 
 // the flag runTest defines which data file to read
-const runTest bool = true
+const runTest bool = false
 const TEST_FILE string = "test.data"
 const DATA_FILE string = "actual.data"
 
@@ -58,89 +57,56 @@ func SolvePuzzlePart1(input []string) int {
 
 // ---------------------------------------------------------------------------
 
-// Finds the first occurance of a pattern in the input and returns the location and the index.
-// In case none of the pattern matches it returns -1
-func findPatternIndexInString(input string, patterns []string) (location int, patternIndex int) {
-	patternIndex = -1
-	for i, pattern := range patterns {
+func findFirstAndLastMatch(input string, patterns []string) (firstMatch string, lastMatch string) {
+	posFirstMatch := -1
+	posLastMatch := -1
+	firstMatch = ""
+	lastMatch = ""
+
+	// I am sure there's a smarter way
+	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)
-		matchIndex := re.FindStringIndex(input)
-		if matchIndex != nil && (patternIndex == -1 || matchIndex[0] < location) {
-			location = matchIndex[0]
-			patternIndex = i
-		}
-	}
-	return location, patternIndex
-}
+		matches := re.FindAllStringIndex(input, -1)
 
-// Takes a string such as "zoneight" containing numbers as text that might overlap and other random
-// characters and returns a list of the numbers found in order [1 8]
-func splitStringByTextNumbers(input string) []byte {
-	var numbers = []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
-	var result []byte
-
-	for i := 0; i < len(input); i++ {
-		subString := input[i:]
-		location, matchIndex := findPatternIndexInString(subString, numbers)
-		if matchIndex == -1 {
-			break
-		} else {
-			result = append(result, byte(matchIndex))
-			i += location
-		}
-	}
-	return result
-}
-
-// Takes a string such as "xtwone3four" containing numbers as text that might overlap or digits and other random
-// characters and returns a list of the numbers found in order [2 1 3 4]
-func splitStringWithDigitsAndText(input string) []byte {
-	var result []byte
-	current := ""
-
-	for _, char := range input {
-		if unicode.IsDigit(char) {
-			if current != "" {
-				// split the string before the digit further into numbers[] if required
-				numbersOrChars := splitStringByTextNumbers(current)
-				result = append(result, numbersOrChars...)
-				current = ""
+		// If there are matches, update the first and last match
+		if len(matches) > 0 {
+			if posFirstMatch == -1 || matches[0][0] < posFirstMatch {
+				firstMatch = input[matches[0][0]:matches[0][1]]
+				posFirstMatch = matches[0][0]
 			}
-			// add the actual digit
-			result = append(result, byte(charToNumber(char)))
-		} else {
-			current += string(char)
+			if posLastMatch == -1 || matches[len(matches)-1][0] > posLastMatch {
+				lastMatch = input[matches[len(matches)-1][0]:matches[len(matches)-1][1]]
+				posLastMatch = matches[len(matches)-1][0]
+			}
 		}
 	}
 
-	if current != "" {
-		numbersOrChars := splitStringByTextNumbers(current)
-		result = append(result, numbersOrChars...)
-	}
+	return firstMatch, lastMatch
+}
 
-	return result
+func getValue(patterns []string, target string) int {
+	for i, value := range patterns {
+		if value == target {
+			if i > 9 {
+				return i - 10
+			}
+			return i
+		}
+	}
+	// Target string not found in the list
+	return -1
 }
 
 func SolvePuzzlePart2(input []string) int {
+	patterns := []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+		"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
 	summ := 0
 	for _, line := range input {
-		digitList := splitStringWithDigitsAndText(line)
-
-		var firstDigit byte = 0
-		var lastDigit byte = 0
-		if len(digitList) >= 1 {
-			firstDigit = digitList[0]
-		}
-		if len(digitList) >= 2 {
-			lastDigit = digitList[len(digitList)-1]
-		}
-		if lastDigit == 0 {
-			lastDigit = firstDigit
-		}
-
-		lineValue := firstDigit*10 + lastDigit
-		fmt.Printf("Line: %s - digitList: %v - Value: %v\n", line, digitList, lineValue)
-		summ += int(lineValue)
+		firstMatch, lastMatch := findFirstAndLastMatch(line, patterns)
+		firstValue := getValue(patterns, firstMatch)
+		lastValue := getValue(patterns, lastMatch)
+		fmt.Printf("String: %s - First: %v - Last: %v\n", line, firstValue, lastValue)
+		summ += firstValue*10 + lastValue
 	}
 
 	return summ
