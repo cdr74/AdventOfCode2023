@@ -10,7 +10,7 @@ import (
 )
 
 // the flag runTest defines which data file to read
-const runTest bool = true
+const runTest bool = false
 const TEST_FILE string = "test.data"
 const DATA_FILE string = "actual.data"
 
@@ -138,7 +138,6 @@ func SolvePuzzle2(games []Game) int {
 	var result int = 0
 	for _, game := range games {
 		minimalBag := getMinimalBag(game)
-		fmt.Printf("Minimal Bag: %v\n", minimalBag)
 		power := minimalBag.RedItems * minimalBag.BlueItems * minimalBag.GreenItems
 		result += power
 	}
