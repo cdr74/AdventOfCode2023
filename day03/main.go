@@ -2,31 +2,176 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/cdr74/AdventOfCode2023/utils"
 )
 
 // the flag runTest defines which data file to read
-const runTest bool = true
+const runTest bool = false
 const TEST_FILE string = "test.data"
 const DATA_FILE string = "actual.data"
 
 // ---------------------------------------------------------------------------
 
+// Translates strings like "467..114.#" into an int array.
+// Digits remain digits, . = -1; Anything else = -2
+// Part 2 Gears are -3
+// we add a borer of -1
+func inputToArray(input []string) [][]int {
+	width := len(input[0]) + 2
+	depth := len(input) + 2
+	dataArr := utils.CreateIntArray(width, depth, -1)
+
+	for d := 1; d < depth-1; d++ {
+		chars := utils.StringToByteArray(input[d-1])
+		for w := 1; w < width-1; w++ {
+			switch {
+			case chars[w-1] == 46:
+				// already initialized, not action
+			case 48 <= chars[w-1] && chars[w-1] <= 57:
+				dataArr[d][w] = int(chars[w-1]) - 48
+			case chars[w-1] == 42:
+				dataArr[d][w] = -3
+			default:
+				dataArr[d][w] = -2
+			}
+		}
+	}
+	return dataArr
+}
+
 // ---------------------------------------------------------------------------
 
-func SolvePuzzle1() int {
+// starts with rightmost digit, work to left until no digit found
+func getNumber(row []int, w int) (int, int) {
+	result := row[w]
+	len := 1
+
+	power := 10
+	for pos := w - 1; pos >= 1; pos-- {
+		if row[pos] >= 0 {
+			result += power * row[pos]
+			power *= 10
+			len++
+		} else {
+			break
+		}
+	}
+
+	return result, len
+}
+
+func isIsolated(data [][]int, d int, w int, len int) bool {
+	for y := d - 1; y <= d+1; y++ {
+		for x := w - len; x <= w+1; x++ {
+			if data[y][x] < -1 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func SolvePuzzle1(data [][]int) int {
 	var result int = 0
+
+	for d := 1; d < len(data)-1; d++ {
+		for w := len(data[0]) - 1; w >= 1; w-- {
+			if data[d][w] >= 0 {
+				number, len := getNumber(data[d], w)
+				if !isIsolated(data, d, w, len) {
+					result += number
+				}
+				w -= len
+			}
+		}
+	}
 
 	return result
 }
 
 // ---------------------------------------------------------------------------
 
-func SolvePuzzle2(games []Game) int {
+// searches start of digits to the right
+func findStartOfNumber(row []int, start int) int {
+	for idx := start; idx < len(row); idx++ {
+		if row[idx] < 0 {
+			return idx - 1
+		}
+	}
+	panic("Failed to find start of Number")
+}
+
+// below 0 are non numbers
+func nbrsOfRow(row []int, start int) []int {
+	var results []int
+	a := row[start]
+	b := row[start+1]
+	c := row[start+2]
+
+	switch {
+	case a >= 0 && b >= 0 && c >= 0:
+		idx := findStartOfNumber(row, start)
+		number, _ := getNumber(row, idx)
+		results = append(results, number)
+	case a >= 0 && b < 0 && c >= 0:
+		idx := start
+		number, _ := getNumber(row, idx)
+		results = append(results, number)
+		idx = findStartOfNumber(row, start+2)
+		number2, _ := getNumber(row, idx)
+		results = append(results, number2)
+	case a >= 0 && b < 0 && c < 0:
+		idx := start
+		number, _ := getNumber(row, idx)
+		results = append(results, number)
+	case a < 0 && b < 0 && c >= 0:
+		idx := findStartOfNumber(row, start+2)
+		number, _ := getNumber(row, idx)
+		results = append(results, number)
+	case a < 0 && b >= 0 && c >= 0:
+		idx := findStartOfNumber(row, start+2)
+		number, _ := getNumber(row, idx)
+		results = append(results, number)
+	case a >= 0 && b >= 0 && c < 0:
+		idx := start + 1
+		number, _ := getNumber(row, idx)
+		results = append(results, number)
+	case a < 0 && b >= 0 && c < 0:
+		idx := start + 1
+		number, _ := getNumber(row, idx)
+		results = append(results, number)
+	}
+	return results
+}
+
+func hasTwoNumbers(data [][]int, d int, w int) (bool, int) {
+	var numbers []int
+	numbers = append(numbers, nbrsOfRow(data[d-1], w-1)...)
+	numbers = append(numbers, nbrsOfRow(data[d], w-1)...)
+	numbers = append(numbers, nbrsOfRow(data[d+1], w-1)...)
+	if len(numbers) == 2 {
+		fmt.Printf("hasTwoNumbers>> %v\n", numbers)
+		return true, numbers[0] * numbers[1]
+	}
+	return false, 0
+}
+
+func SolvePuzzle2(data [][]int) int {
 	var result int = 0
 
+	for d := 1; d < len(data)-1; d++ {
+		for w := 1; w < len(data[0]); w++ {
+			if (data[d][w]) == -3 {
+				// found a star
+				hit, power := hasTwoNumbers(data, d, w)
+				if hit {
+					fmt.Printf("Found engine part at %d, %d - %d\n", d, w, power)
+					result += power
+				}
+			}
+		}
+	}
 	return result
 }
 
@@ -44,14 +189,15 @@ func main() {
 		input = utils.ReadDataFile(DATA_FILE)
 	}
 
-	result1 := SolvePuzzle1()
-	result2 := SolvePuzzle2()
+	dataArr := inputToArray(input)
+	result1 := SolvePuzzle1(dataArr)
+	result2 := SolvePuzzle2(dataArr)
 	stopwatch.Stop()
 
 	// -------------------------------------
-	var elapsedTime time.Duration = stopwatch.GetElapsedTime()
+	elapsedTime := stopwatch.GetElapsedTime()
 	fmt.Println("Running as test:\t", runTest)
-	fmt.Println("Result 1:\t\t\t", result1)
-	fmt.Println("Result 2:\t\t\t", result2)
+	fmt.Println("Result 1:\t\t", result1)
+	fmt.Println("Result 2:\t\t", result2)
 	fmt.Println("Elapsed time:\t\t", elapsedTime)
 }

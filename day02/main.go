@@ -62,17 +62,15 @@ func stringToToGame(input string) Game {
 	numberSubstring := input[spaceIndex+1 : colonIndex]
 	game.ID, _ = strconv.Atoi(numberSubstring)
 
-	// ignore first part
+	// ignore first part with game id, read colors
 	input = input[colonIndex+1:]
 
-	// iterate over all games
+	// iterate over all bag draws in a game
 	gameStrings := strings.Split(input, ";")
 	for _, gameString := range gameStrings {
 		bag := stringToBag(gameString)
 		game.bags = append(game.bags, bag)
 	}
-
-	fmt.Printf("Game: %v\n", game)
 	return game
 }
 
