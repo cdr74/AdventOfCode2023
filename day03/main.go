@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/cdr74/AdventOfCode2023/utils"
 )
@@ -22,21 +23,21 @@ func inputToArray(input []string) [][]int {
 	depth := len(input) + 2
 	dataArr := utils.CreateIntArray(width, depth, -1)
 
-	for d := 1; d < depth-1; d++ {
-		chars := utils.StringToByteArray(input[d-1])
-		for w := 1; w < width-1; w++ {
-			switch {
-			case chars[w-1] == 46:
-				// already initialized, not action
-			case 48 <= chars[w-1] && chars[w-1] <= 57:
-				dataArr[d][w] = int(chars[w-1]) - 48
-			case chars[w-1] == 42:
-				dataArr[d][w] = -3
+	for d, row := range input {
+		for w, char := range row {
+			switch char {
+			case '.':
+				// already initialized, no action needed
+			case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+				dataArr[d+1][w+1] = int(char - '0')
+			case '*':
+				dataArr[d+1][w+1] = -3
 			default:
-				dataArr[d][w] = -2
+				dataArr[d+1][w+1] = -2
 			}
 		}
 	}
+
 	return dataArr
 }
 
@@ -47,15 +48,9 @@ func getNumber(row []int, w int) (int, int) {
 	result := row[w]
 	len := 1
 
-	power := 10
-	for pos := w - 1; pos >= 1; pos-- {
-		if row[pos] >= 0 {
-			result += power * row[pos]
-			power *= 10
-			len++
-		} else {
-			break
-		}
+	for pos := w - 1; pos >= 1 && row[pos] >= 0; pos-- {
+		result += int(math.Pow10(len)) * row[pos]
+		len++
 	}
 
 	return result, len
@@ -102,7 +97,7 @@ func findStartOfNumber(row []int, start int) int {
 	panic("Failed to find start of Number")
 }
 
-// below 0 are non numbers
+// Checks 3 fields for a positive number and then identifies the actual number
 func nbrsOfRow(row []int, start int) []int {
 	var results []int
 	a := row[start]
@@ -151,7 +146,7 @@ func hasTwoNumbers(data [][]int, d int, w int) (bool, int) {
 	numbers = append(numbers, nbrsOfRow(data[d], w-1)...)
 	numbers = append(numbers, nbrsOfRow(data[d+1], w-1)...)
 	if len(numbers) == 2 {
-		fmt.Printf("hasTwoNumbers>> %v\n", numbers)
+		//fmt.Printf("hasTwoNumbers>> %v\n", numbers)
 		return true, numbers[0] * numbers[1]
 	}
 	return false, 0
@@ -166,7 +161,7 @@ func SolvePuzzle2(data [][]int) int {
 				// found a star
 				hit, power := hasTwoNumbers(data, d, w)
 				if hit {
-					fmt.Printf("Found engine part at %d, %d - %d\n", d, w, power)
+					//fmt.Printf("Found engine part at %d, %d - %d\n", d, w, power)
 					result += power
 				}
 			}
