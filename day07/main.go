@@ -27,7 +27,8 @@ func MapCardValue(char rune) int {
 	case 'T':
 		return 10
 	case 'J':
-		return 11
+		// TODO: use 11 for part 1
+		return 1
 	case 'Q':
 		return 12
 	case 'K':
@@ -62,12 +63,22 @@ func evaluateHand(hand Hand) int {
 		cardCount[card]++
 	}
 
+	jokerCount := 0
+	if cardCount[1] > 0 {
+		jokerCount = cardCount[1]
+		cardCount[1] = 0
+	}
+
 	counts := make([]int, 0, len(cardCount))
 	for _, count := range cardCount {
 		counts = append(counts, count)
 	}
-
 	sort.Sort(sort.Reverse(sort.IntSlice(counts)))
+
+	if jokerCount > 0 {
+		counts[0] += jokerCount
+
+	}
 
 	switch {
 	case counts[0] == 5:
@@ -118,7 +129,7 @@ func SolvePuzzle1(hands []Hand) int {
 	var result int = 0
 	sortByEvaluation(hands)
 	for idx, hand := range hands {
-		fmt.Printf("SolvePuzzle1() - Hand: %v\n", hand)
+		//fmt.Printf("SolvePuzzle1() - Hand: %v\n", hand)
 		result += (len(hands) - idx) * hand.Bet
 	}
 	return result
@@ -128,7 +139,11 @@ func SolvePuzzle1(hands []Hand) int {
 
 func SolvePuzzle2(hands []Hand) int {
 	var result int = 0
-
+	sortByEvaluation(hands)
+	for idx, hand := range hands {
+		//fmt.Printf("SolvePuzzle1() - Hand: %v\n", hand)
+		result += (len(hands) - idx) * hand.Bet
+	}
 	return result
 }
 
@@ -151,14 +166,14 @@ func main() {
 		hands = append(hands, ParseHand(line))
 	}
 
-	result1 := SolvePuzzle1(hands)
+	//result1 := SolvePuzzle1(hands)
 	result2 := SolvePuzzle2(hands)
 	stopwatch.Stop()
 
 	// -------------------------------------
 	var elapsedTime time.Duration = stopwatch.GetElapsedTime()
 	fmt.Println("Running as test:\t", runTest)
-	fmt.Println("Result 1:\t\t\t", result1)
+	//fmt.Println("Result 1:\t\t\t", result1)
 	fmt.Println("Result 2:\t\t\t", result2)
 	fmt.Println("Elapsed time:\t\t", elapsedTime)
 }
