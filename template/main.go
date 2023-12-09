@@ -7,14 +7,14 @@ import (
 	"github.com/cdr74/AdventOfCode2023/utils"
 )
 
-// the flag runTest defines which data file to read
+// runTest defines whether test.data or actual.data should be used
 const runTest bool = true
 const TEST_FILE string = "test.data"
 const DATA_FILE string = "actual.data"
 
-// ---------------------------------------------------------------------------
+// -------------------------- Common Section ---------------------------------
 
-// ---------------------------------------------------------------------------
+// -------------------------- Puzzle part 1 ----------------------------------
 
 func SolvePuzzle1() int {
 	var result int = 0
@@ -22,15 +22,15 @@ func SolvePuzzle1() int {
 	return result
 }
 
-// ---------------------------------------------------------------------------
+// -------------------------- Puzzle part 2 ----------------------------------
 
-func SolvePuzzle2(games []Game) int {
+func SolvePuzzle2() int {
 	var result int = 0
 
 	return result
 }
 
-// ---------------------------------------------------------------------------
+// -------------------------- Main entry -------------------------------------
 
 func main() {
 	var input []string
