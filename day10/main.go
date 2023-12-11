@@ -4,7 +4,7 @@
 // Analyzes a pipe channel and finds
 // Part 1: The point furthest away from the start counted in steps
 //         Simplification S is only connected to 2 pipes; no dead ends to analyze
-// Part 2:
+// Part 2: Calculate the area enclosed in the pipeline
 //
 // Start is represented by S and the rest is represented by signs that for mpipe elements
 // - = horizontal pipe
