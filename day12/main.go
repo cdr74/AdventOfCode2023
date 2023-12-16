@@ -187,9 +187,8 @@ func getSequenceLength(sequenceList []int, sequenceIdx int) int {
 	return 0
 }
 
-// TODO - runs oom on large trees
+/*
 func recursiveCombinationCount(line []byte, charPos int, currentSequenceCount int, sequenceIdx int, results *[]string) {
-	//fmt.Println(string(line))
 	sequenceLength := getSequenceLength(sequenceList, sequenceIdx)
 
 	for i := charPos; i < len(line); i++ {
@@ -231,6 +230,69 @@ func recursiveCombinationCount(line []byte, charPos int, currentSequenceCount in
 		*results = append(*results, string(line))
 	}
 }
+*/
+
+var memoizedResults map[string]int = make(map[string]int)
+
+func memoizedRecursiveCount(line []byte, charPos int, currentSequenceCount int, sequenceIdx int) int {
+	memoKey := fmt.Sprintf("%s-%d-%d-%d", string(line), charPos, currentSequenceCount, sequenceIdx)
+	fmt.Printf("memoKey: %v\n", memoKey)
+	if val, ok := memoizedResults[memoKey]; ok {
+		//fmt.Printf("Cache hit: %v\n", memoKey)
+		return val
+	} else {
+		//fmt.Printf("Cache miss: %v\n", memoKey)
+	}
+
+	variationCount := 0
+	sequenceLength := getSequenceLength(sequenceList, sequenceIdx)
+
+	for i := charPos; i < len(line); i++ {
+		if line[i] == '#' {
+			currentSequenceCount++
+			if currentSequenceCount > sequenceLength {
+				// wrong branch, too many # in sequence; need to backtrack
+				return variationCount
+			}
+		} else if line[i] == '.' {
+			if currentSequenceCount > 0 && currentSequenceCount < sequenceLength {
+				// wrong branch, not enough # in sequence; need to backtrack
+				return variationCount
+			}
+			if currentSequenceCount == sequenceLength {
+				// found valid sequence, move to next sequence in list
+				currentSequenceCount = 0
+				sequenceIdx++
+				sequenceLength = getSequenceLength(sequenceList, sequenceIdx)
+			}
+		} else if line[i] == '?' {
+			if sequenceLength > 0 && currentSequenceCount < sequenceLength {
+				// no point to go this path if we are done with last sequence
+				line[i] = '#'
+				variationCount += memoizedRecursiveCount(line, i, currentSequenceCount, sequenceIdx)
+				// undo change for backtracking
+				line[i] = '?'
+			}
+			line[i] = '.'
+			variationCount += memoizedRecursiveCount(line, i, currentSequenceCount, sequenceIdx)
+			// undo change for backtracking
+			line[i] = '?'
+			// tried both options, backtrack
+
+			memoKey = fmt.Sprintf("%d-%d-%d", i, currentSequenceCount, sequenceIdx)
+			memoizedResults[memoKey] = variationCount
+			return variationCount
+		}
+	}
+	// all sequences consumed; we can end with a '.' or a '#'
+	if currentSequenceCount == sequenceLength && sequenceIdx >= len(sequenceList)-1 {
+		variationCount++
+		memoKey = fmt.Sprintf("%d-%d-%d", charPos, currentSequenceCount, sequenceIdx)
+		memoizedResults[memoKey] = variationCount
+	}
+
+	return variationCount
+}
 
 // multiply all by 5
 func SolvePart2(input []string) int {
@@ -242,10 +304,16 @@ func SolvePart2(input []string) int {
 		sequenceList = multiplyList(sequenceList, 5)
 		sequence := line[:strings.Index(line, " ")]
 		sequence = multiplySequence(sequence, 5)
-		results := []string{}
-		recursiveCombinationCount([]byte(sequence), 0, 0, 0, &results)
-		fmt.Printf("line: %s, sequence: %v, results: %d\n", sequence, sequenceList, len(results))
-		result += len(results)
+		//results := []string{}
+		//recursiveCombinationCount([]byte(sequence), 0, 0, 0, &results)
+		//fmt.Printf("line: %s, sequence: %v, results: %d\n", sequence, sequenceList, len(results))
+		// result += len(results)
+
+		// clear cache
+		memoizedResults = make(map[string]int)
+		cnt := memoizedRecursiveCount([]byte(sequence), 0, 0, 0)
+		fmt.Printf("line: %s, sequence: %v, results: %d\n", sequence, sequenceList, cnt)
+		result += cnt
 	}
 	return result
 }
