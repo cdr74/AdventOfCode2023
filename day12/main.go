@@ -13,7 +13,10 @@
 //					(each group is seperated by at least one working spring)
 //
 // Part 1: count all possible combinations of aarrangements on all lines
-// Part 2:
+// Part 2: credit goes to this guy as i f..up my recursion
+//
+//	https://pastebin.com/djb8RJ85
+//
 // ---------------------------------------------------------------------------
 package main
 
@@ -26,7 +29,7 @@ import (
 )
 
 // runTest defines whether test.data or actual.data should be used
-const runTest bool = true
+const runTest bool = false
 const TEST_FILE string = "test.data"
 const DATA_FILE string = "actual.data"
 
@@ -42,105 +45,96 @@ func getSequenceList(line string) []int {
 	return result
 }
 
-// -------------------------- Puzzle part 1 ----------------------------------
+var memoizedResults map[string]int = make(map[string]int)
 
-func isValidSequence(line string, idx int, length int) bool {
-	if idx+length > len(line) {
-		return false
-	}
-
-	// check sequence
-	for i := idx; i < idx+length; i++ {
-		if !(line[i] == '#' || line[i] == '?') {
-			return false
+func containsValue(list []byte, value byte) bool {
+	for i := 0; i < len(list); i++ {
+		if list[i] == value {
+			return true
 		}
 	}
-
-	// check right border
-	if idx+length < len(line) {
-		if !(line[idx+length] == '.' || line[idx+length] == '?') {
-			return false
-		}
-	}
-
-	// check left border
-	if idx > 0 {
-		if !(line[idx-1] == '.' || line[idx-1] == '?') {
-			return false
-		}
-	}
-
-	return true
+	return false
 }
 
-func createCombinationsHelper(line []rune, index, count, maxCount int, result *[]string) {
-	if index == len(line) {
-		*result = append(*result, string(line))
-		return
+func memoizedRecursiveCount(line []byte, sequenceList []int) int {
+	//fmt.Printf("memoizedRecursiveCount() - line: %s, sequence: %v\n", string(line), sequenceList)
+	memoKey := fmt.Sprintf("%s-%v", string(line), sequenceList)
+	if val, ok := memoizedResults[memoKey]; ok {
+		return val
 	}
 
-	if line[index] == '?' {
-		line[index] = '#'
-		if count+1 <= maxCount {
-			createCombinationsHelper(line, index+1, count+1, maxCount, result)
-		}
-		line[index] = '.'
-		if count <= maxCount {
-			createCombinationsHelper(line, index+1, count, maxCount, result)
-		}
-		line[index] = '?' // backtrack for other combinations
-	} else if line[index] == '#' {
-		if count+1 <= maxCount {
-			createCombinationsHelper(line, index+1, count+1, maxCount, result)
-		}
-	} else {
-		createCombinationsHelper(line, index+1, count, maxCount, result)
-	}
+	count := recursiveCount(line, sequenceList)
+	memoizedResults[memoKey] = count
+
+	return count
 }
 
-func createAllCombinations(line string, maxSequenceLength int, maxCount int) []string {
-	var result []string
-	createCombinationsHelper([]rune(line), 0, 0, maxCount, &result)
-	return result
-}
-
-func maxOfList(list []int) int {
-	var result int = 0
-	for _, item := range list {
-		if item > result {
-			result = item
-		}
-	}
-	return result
-}
-
-func countAllCombinations(line string, sequenceList []int) int {
-	var result int = 0
-	sumOfSequence := utils.SumOfArray(sequenceList)
-	lineCombinations := createAllCombinations(line, maxOfList(sequenceList), sumOfSequence)
-
-	seqID := 0
-	for _, combination := range lineCombinations {
-		for pos := 0; pos < len(combination); pos++ {
-			if combination[pos] != '.' {
-				if isValidSequence(combination, pos, sequenceList[seqID]) {
-					pos += sequenceList[seqID] - 1
-					seqID++
-					if seqID == len(sequenceList) {
-						result++
-						break
-					}
-				} else {
-					break
-				}
+// consumes line from start and removes processed characters, calls memoizedRecursiveCount to cahce results
+func recursiveCount(line []byte, sequenceList []int) int {
+	for {
+		if len(sequenceList) == 0 {
+			if containsValue(line, '#') {
+				// invalid combination
+				return 0
+			} else {
+				// no more groups to match, valid combination
+				return 1
 			}
 		}
-		seqID = 0
-	}
 
-	//fmt.Printf("countAllCombinations() - line: %s, sequence: %v, combinations: %d, results: %d\n", line, sequenceList, len(lineCombinations), result)
-	return result
+		// sequenceList is not empty, but line is fully processed
+		if len(line) == 0 {
+			return 0
+		}
+
+		// remove leading '.' and restart loop
+		if line[0] == '.' {
+			line = []byte(strings.TrimLeft(string(line), "."))
+			continue
+		}
+
+		if line[0] == '?' {
+			// try both options and add them up
+			line[0] = '.'
+			cnt := memoizedRecursiveCount(line, sequenceList)
+			line[0] = '#'
+			cnt += memoizedRecursiveCount(line, sequenceList)
+			return cnt
+		}
+
+		if line[0] == '#' {
+			// start of a group, consume it
+
+			// group must not be followed by a '#' and we need enough chars left in line
+			if len(line) < sequenceList[0]+1 || line[sequenceList[0]] == '#' {
+				return 0
+			}
+
+			// check if for length of group if a '.' exists
+			for j := 0; j < sequenceList[0]; j++ {
+				if line[j] == '.' {
+					// premature end of group, invalid
+					return 0
+				}
+			}
+
+			if len(sequenceList) > 1 {
+				// skip to after group and after the dot following the group
+				line = line[sequenceList[0]+1:]
+				sequenceList = sequenceList[1:]
+				continue
+			}
+
+			line = line[sequenceList[0]:]
+			sequenceList = sequenceList[1:]
+			continue
+		}
+
+		panic("recursiveCount() - bad input line")
+	}
 }
+
+// -------------------------- Puzzle part 1 ----------------------------------
 
 // find comninations of # sequences for the sequenceList (ints with sequence lengths)
 // input "?###???????? 3,2,1" has 10 possible arrangements
@@ -150,15 +144,18 @@ func SolvePart1(input []string) int {
 
 	for _, line := range input {
 		sequenceList := getSequenceList(line)
-		sequence := line[:strings.Index(line, " ")]
-		result += countAllCombinations(sequence, sequenceList)
+		sequence := line[:strings.Index(line, " ")] + string('.')
+
+		// clear cache
+		memoizedResults = make(map[string]int)
+		cnt := memoizedRecursiveCount([]byte(sequence), sequenceList)
+		fmt.Printf("line: %s, sequence: %v, results: %d\n", sequence, sequenceList, cnt)
+		result += cnt
 	}
 	return result
 }
 
 // -------------------------- Puzzle part 2 ----------------------------------
-
-var sequenceList []int
 
 func multiplyList(list []int, factor int) []int {
 	var result []int
@@ -177,121 +174,7 @@ func multiplySequence(sequence string, factor int) string {
 			result += fmt.Sprintf("?%s", sequence)
 		}
 	}
-	return result
-}
-
-func getSequenceLength(sequenceList []int, sequenceIdx int) int {
-	if sequenceIdx < len(sequenceList) {
-		return sequenceList[sequenceIdx]
-	}
-	return 0
-}
-
-/*
-func recursiveCombinationCount(line []byte, charPos int, currentSequenceCount int, sequenceIdx int, results *[]string) {
-	sequenceLength := getSequenceLength(sequenceList, sequenceIdx)
-
-	for i := charPos; i < len(line); i++ {
-		if line[i] == '#' {
-			currentSequenceCount++
-			if currentSequenceCount > sequenceLength {
-				// wrong branch, too many # in sequence; need to backtrack
-				return
-			}
-		} else if line[i] == '.' {
-			if currentSequenceCount > 0 && currentSequenceCount < sequenceLength {
-				// wrong branch, not enough # in sequence; need to backtrack
-				return
-			}
-			if currentSequenceCount == sequenceLength {
-				// found valid sequence, move to next sequence in list
-				currentSequenceCount = 0
-				sequenceIdx++
-				sequenceLength = getSequenceLength(sequenceList, sequenceIdx)
-			}
-		} else if line[i] == '?' {
-			if sequenceLength > 0 && currentSequenceCount < sequenceLength {
-				// no point to go this path if we are done with last sequence
-				line[i] = '#'
-				recursiveCombinationCount(line, i, currentSequenceCount, sequenceIdx, results)
-				// undo change for backtracking
-				line[i] = '?'
-			}
-			line[i] = '.'
-			recursiveCombinationCount(line, i, currentSequenceCount, sequenceIdx, results)
-			// undo change for backtracking
-			line[i] = '?'
-			// tried both options, backtrack
-			return
-		}
-	}
-	// all sequences consumed; we can end with a '.' or a '#'
-	if currentSequenceCount == sequenceLength && sequenceIdx >= len(sequenceList)-1 {
-		*results = append(*results, string(line))
-	}
-}
-*/
-
-var memoizedResults map[string]int = make(map[string]int)
-
-func memoizedRecursiveCount(line []byte, charPos int, currentSequenceCount int, sequenceIdx int) int {
-	memoKey := fmt.Sprintf("%s-%d-%d-%d", string(line), charPos, currentSequenceCount, sequenceIdx)
-	fmt.Printf("memoKey: %v\n", memoKey)
-	if val, ok := memoizedResults[memoKey]; ok {
-		//fmt.Printf("Cache hit: %v\n", memoKey)
-		return val
-	} else {
-		//fmt.Printf("Cache miss: %v\n", memoKey)
-	}
-
-	variationCount := 0
-	sequenceLength := getSequenceLength(sequenceList, sequenceIdx)
-
-	for i := charPos; i < len(line); i++ {
-		if line[i] == '#' {
-			currentSequenceCount++
-			if currentSequenceCount > sequenceLength {
-				// wrong branch, too many # in sequence; need to backtrack
-				return variationCount
-			}
-		} else if line[i] == '.' {
-			if currentSequenceCount > 0 && currentSequenceCount < sequenceLength {
-				// wrong branch, not enough # in sequence; need to backtrack
-				return variationCount
-			}
-			if currentSequenceCount == sequenceLength {
-				// found valid sequence, move to next sequence in list
-				currentSequenceCount = 0
-				sequenceIdx++
-				sequenceLength = getSequenceLength(sequenceList, sequenceIdx)
-			}
-		} else if line[i] == '?' {
-			if sequenceLength > 0 && currentSequenceCount < sequenceLength {
-				// no point to go this path if we are done with last sequence
-				line[i] = '#'
-				variationCount += memoizedRecursiveCount(line, i, currentSequenceCount, sequenceIdx)
-				// undo change for backtracking
-				line[i] = '?'
-			}
-			line[i] = '.'
-			variationCount += memoizedRecursiveCount(line, i, currentSequenceCount, sequenceIdx)
-			// undo change for backtracking
-			line[i] = '?'
-			// tried both options, backtrack
-
-			memoKey = fmt.Sprintf("%d-%d-%d", i, currentSequenceCount, sequenceIdx)
-			memoizedResults[memoKey] = variationCount
-			return variationCount
-		}
-	}
-	// all sequences consumed; we can end with a '.' or a '#'
-	if currentSequenceCount == sequenceLength && sequenceIdx >= len(sequenceList)-1 {
-		variationCount++
-		memoKey = fmt.Sprintf("%d-%d-%d", charPos, currentSequenceCount, sequenceIdx)
-		memoizedResults[memoKey] = variationCount
-	}
-
-	return variationCount
+	return result + string('.')
 }
 
 // multiply all by 5
@@ -299,20 +182,16 @@ func SolvePart2(input []string) int {
 	var result int = 0
 
 	for _, line := range input {
-		sequenceList = getSequenceList(line)
-		// factor 5
+		sequenceList := getSequenceList(line)
 		sequenceList = multiplyList(sequenceList, 5)
+
 		sequence := line[:strings.Index(line, " ")]
 		sequence = multiplySequence(sequence, 5)
-		//results := []string{}
-		//recursiveCombinationCount([]byte(sequence), 0, 0, 0, &results)
-		//fmt.Printf("line: %s, sequence: %v, results: %d\n", sequence, sequenceList, len(results))
-		// result += len(results)
 
 		// clear cache
 		memoizedResults = make(map[string]int)
-		cnt := memoizedRecursiveCount([]byte(sequence), 0, 0, 0)
-		fmt.Printf("line: %s, sequence: %v, results: %d\n", sequence, sequenceList, cnt)
+		cnt := memoizedRecursiveCount([]byte(sequence), sequenceList)
+		//fmt.Printf("line: %s, sequence: %v, results: %d\n", sequence, sequenceList, cnt)
 		result += cnt
 	}
 	return result

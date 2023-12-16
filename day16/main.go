@@ -197,7 +197,7 @@ func runBeamTillEnd(beam Laser) {
 			beam.Row++
 		}
 		if _, ok := positionCache[beam]; ok {
-			// beam has been seen before
+			// beam has been seen before at this position with this direction
 			notInLoop = false
 		}
 		positionCache[Laser{Row: beam.Row, Col: beam.Col, direction: beam.direction}] = true
@@ -210,7 +210,7 @@ func runBeamTillEnd(beam Laser) {
 }
 
 func countEnergy() int {
-	var result int = 0
+	var result int
 	for r := 0; r < ROWS; r++ {
 		for c := 0; c < COLS; c++ {
 			if field[r][c].IsEnergized {
