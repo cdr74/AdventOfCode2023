@@ -5,17 +5,18 @@
 // This was created using copilot to assist me in learning Go.
 //
 // Scenario: Get the crucible from the lava pool to the machine parts factory.
-//    To do this, you need to minimize heat loss while choosing a route that
-//    doesn't require the crucible to go in a straight line for too long.
 //
-//	Input:
-//    lines with number such as "2413432311323"
-//    number = single digit that represents the amount of heat loss
-//             if the crucible enters that block
+//	   To do this, you need to minimize heat loss while choosing a route that
+//	   doesn't require the crucible to go in a straight line for too long.
 //
-//  Rule for movement
-//     at most three blocks in a single direction
-//     then turn left or right
+//		Input:
+//	   lines with number such as "2413432311323"
+//	   number = single digit that represents the amount of heat loss
+//	            if the crucible enters that block
+//
+//	 Rule for movement
+//	    at most three blocks in a single direction
+//	    then turn left or right
 //
 // Part 1: Start top left, destination bottom right
 // Part 2:
@@ -25,6 +26,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/cdr74/AdventOfCode2023/utils"
@@ -37,7 +39,7 @@ const DATA_FILE string = "actual.data"
 
 // -------------------------- Common Data Section ----------------------------
 
-const MAX_STRAIGHT = 3
+const MAX_STRAIGHT = 4
 
 var field [][]byte
 var ROWS int
@@ -76,154 +78,168 @@ func printField(r_crucible int, c_crucible int) {
 
 // -------------------------- Puzzle part 1 ----------------------------------
 
-var heat int = math.MaxInt32
-
-// Position represents a move from one cell to another.
-type Position struct {
-	Row, Col int
-}
-
-func isValidMove(row, col int) bool {
-	return row >= 0 && row < ROWS && col >= 0 && col < COLS
-}
-
-func is4Straight(path []Position, move Position) bool {
-	if len(path) < MAX_STRAIGHT {
-		return false
-	} else {
-		current := len(path) - 1
-		if move.Col == path[current].Col &&
-			path[current].Col == path[current-1].Col &&
-			path[current].Col == path[current-2].Col {
-			return true
+func printFieldWithDistances(dist map[string]int) {
+	for r := 0; r < ROWS; r++ {
+		for c := 0; c < COLS; c++ {
+			key := fmt.Sprintf("%d-%d", r, c)
+			if dist[key] == math.MaxInt32 {
+				fmt.Printf("XXXXX\t")
+			} else {
+				fmt.Printf("%d\t", dist[key])
+			}
 		}
-		if move.Row == path[current].Row &&
-			path[current].Row == path[current-1].Row &&
-			path[current].Row == path[current-2].Row {
-			return true
+		fmt.Println()
+	}
+	fmt.Println()
+}
+
+type node struct {
+	key  string
+	cost int
+}
+
+type Graph map[string]map[string]int
+
+func (g Graph) Path(start, target string) (path []string, cost int, err error) {
+	explored := make(map[string]bool)   // set of nodes we already explored
+	frontier := utils.NewQueue()        // queue of the nodes to explore
+	previous := make(map[string]string) // previously visited node
+
+	frontier.Set(start, 0)
+
+	// run until we visited every node in the frontier
+	for !frontier.IsEmpty() {
+		aKey, aPriority := frontier.Next()
+		n := node{aKey, aPriority}
+
+		if n.key == target {
+			cost = n.cost
+			nKey := n.key
+			for nKey != start {
+				path = append(path, nKey)
+				nKey = previous[nKey]
+			}
+			break
+		}
+
+		explored[n.key] = true
+
+		// loop all the neighboring nodes
+		for nKey, nCost := range g[n.key] {
+			if explored[nKey] {
+				continue
+			}
+
+			// TODO add check for length of move strek
+			if _, ok := frontier.Get(nKey); !ok {
+				previous[nKey] = n.key
+				frontier.Set(nKey, n.cost+nCost)
+				continue
+			}
+
+			frontierCost, _ := frontier.Get(nKey)
+			nodeCost := n.cost + nCost
+
+			if nodeCost < frontierCost {
+				previous[nKey] = n.key
+				frontier.Set(nKey, nodeCost)
+			}
 		}
 	}
+
+	// add the origin at the end of the path
+	path = append(path, start)
+
+	// reverse the path because it was popilated
+	// in reverse, form target to start
+	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+		path[i], path[j] = path[j], path[i]
+	}
+
+	return
+}
+
+// no n moves in straight line
+func isViolatingRule(node string, prev map[string]string) bool {
+	var keys []string
+	first_col := -1
+	first_row := -1
+	cnt1 := 0
+	cnt2 := 0
+
+	currentKey := node
+	for i := 0; i <= MAX_STRAIGHT; i++ {
+		keys = append(keys, currentKey)
+		if len(currentKey) < 3 {
+			return false
+		}
+
+		idx := strings.Index(currentKey, "-")
+		col := utils.StringToInt(currentKey[:idx])
+		row := utils.StringToInt(currentKey[idx+1:])
+
+		if i == 0 {
+			first_col = col
+			first_row = row
+		}
+		if first_row == row {
+			cnt1++
+		}
+		if first_col == col {
+			cnt2++
+		}
+
+		currentKey = prev[currentKey]
+	}
+
+	if cnt1 > MAX_STRAIGHT || cnt2 > MAX_STRAIGHT {
+		//fmt.Printf("Found violation at node: %v, %v, %d, %d\n", node, keys, cnt2, cnt1)
+		return true
+	}
+
 	return false
 }
 
-func heatOfPath(path []Position) int {
-	var heat int = 0
-	for _, move := range path {
-		heat += int(field[move.Row][move.Col])
-	}
-	return heat
-}
+// type Graph map[string]map[string]int
+//
+//	Graph{
+//		"0-0": {"0-1": 10, "1-0": 20},
+//		"0-1": {"0-2": 50},
+//	}
+func buildGraph() Graph {
+	graph := make(map[string]map[string]int)
 
-func getMoves(row, col int, path []Position) []Position {
-	var moves []Position
-	if len(path) == 1 {
-		// no assumption about start position
-		moves = append(moves, Position{row + 1, col})
-		moves = append(moves, Position{row, col + 1})
-		moves = append(moves, Position{row - 1, col})
-		moves = append(moves, Position{row, col - 1})
-	} else {
-		current := len(path) - 1
-		if path[current].Col == path[current-1].Col {
-			// We were moving vertically, so get horizontal moves
-			moves = append(moves, Position{row, col + 1})
-			moves = append(moves, Position{row, col - 1})
-			if path[current].Row < path[current-1].Row {
-				moves = append(moves, Position{row - 1, col})
-			} else {
-				moves = append(moves, Position{row + 1, col})
+	for r := 0; r < ROWS; r++ {
+		for c := 0; c < COLS; c++ {
+			key := fmt.Sprintf("%d-%d", r, c)
+			graph[key] = make(map[string]int)
+
+			if r > 0 {
+				graph[key][fmt.Sprintf("%d-%d", r-1, c)] = int(field[r-1][c])
 			}
-		} else if path[current].Row == path[current-1].Row {
-			// We were moving horizontally, so get vertical moves
-			moves = append(moves, Position{row + 1, col})
-			moves = append(moves, Position{row - 1, col})
-			if path[current].Col < path[current-1].Col {
-				moves = append(moves, Position{row, col - 1})
-			} else {
-				moves = append(moves, Position{row, col + 1})
+			if c > 0 {
+				graph[key][fmt.Sprintf("%d-%d", r, c-1)] = int(field[r][c-1])
+			}
+			if r < ROWS-1 {
+				graph[key][fmt.Sprintf("%d-%d", r+1, c)] = int(field[r+1][c])
+			}
+			if c < COLS-1 {
+				graph[key][fmt.Sprintf("%d-%d", r, c+1)] = int(field[r][c+1])
 			}
 		}
 	}
-	return moves
-}
 
-// findAllPaths finds all valid paths without cycles using backtracking.
-func findAllPaths(row, col int, visited [][]bool, path []Position, allPaths *[][]Position) {
-	currentHeat := heatOfPath(path)
-	if currentHeat >= heat {
-		// hotter than already existing path, so stop exploring
-		return
-	}
-
-	if row == ROWS-1 && col == COLS-1 {
-		// Reached the destination, add the path to the result and update heat
-		if currentHeat <= heat {
-			for _, move := range path {
-				fmt.Printf("(%d, %d) -> ", move.Row, move.Col)
-			}
-			fmt.Println(heatOfPath(path))
-			heat = currentHeat
-			*allPaths = append(*allPaths, append([]Position{}, path...))
-		}
-		return
-	}
-
-	// Mark the current cell as visited
-	visited[row][col] = true
-
-	// Get all 3 valid moves, forward, left and right based on where we were last in path
-	moves := getMoves(row, col, path)
-
-	for _, move := range moves {
-		if isValidMove(move.Row, move.Col) &&
-			!visited[move.Row][move.Col] &&
-			!is4Straight(path, move) {
-
-			path = append(path, move)
-			findAllPaths(move.Row, move.Col, visited, path, allPaths)
-
-			// Backtrack: remove the last move to explore other possibilities
-			path = path[:len(path)-1]
-		}
-	}
-
-	// Mark the current cell as not visited (backtrack)
-	visited[row][col] = false
-}
-
-// based on field create a graph for use of dijkstra algo
-// Graph map[string]map[string]int
-// first string is start position (row, col), example "0,0"
-// second string map is end positions (row, col), example "0,1"
-// int is distance between start and end (in this case the heat loss)
-// no more than 3 blocks in a single direction
-func buildGraph() {
-	graph := make(utils.Graph)
-	graph["start"] = make(map[string]int)
-	graph["start"]["0-0"] = int(field[0][0])
-
-	visited := make([][]bool, ROWS)
-	for i := range visited {
-		visited[i] = make([]bool, COLS)
-	}
-
-	var allPaths [][]Position
-	findAllPaths(0, 0, visited, []Position{{0, 0}}, &allPaths)
-
-	for _, path := range allPaths {
-		for _, move := range path {
-			fmt.Printf("(%d, %d) -> ", move.Row, move.Col)
-		}
-		heat := heatOfPath(path)
-		fmt.Printf("heat: %d\n", heat)
-		fmt.Println("End")
-	}
+	return graph
 }
 
 func SolvePart1() int {
-	buildGraph()
-	var result int = 0
-	return result
+	graph := buildGraph()
+
+	// unmodified dijkstra
+	path, cost, _ := graph.Path("0-0", "12-12")
+	fmt.Printf("Path from 'start' to '12-12' with lowest cost: %v cost: %v\n", path, cost)
+
+	return cost
 }
 
 // -------------------------- Puzzle part 2 ----------------------------------
@@ -249,7 +265,6 @@ func main() {
 	}
 
 	inputLineToValues(input)
-	printField(0, 0)
 
 	result1 := SolvePart1()
 	result2 := SolvePart2()

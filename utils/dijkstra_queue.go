@@ -1,7 +1,3 @@
-/*
- source: https://github.com/albertorestifo/dijkstra/blob/aba76f725f72/queue.go
-*/
-
 package utils
 
 import "sort"
