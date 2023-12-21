@@ -39,7 +39,7 @@ const DATA_FILE string = "actual.data"
 
 // -------------------------- Common Data Section ----------------------------
 
-const MAX_STRAIGHT = 4
+const MAX_STRAIGHT = 3
 
 var field [][]byte
 var ROWS int
@@ -121,7 +121,6 @@ func (g Graph) Path(start, target string) (path []string, cost int, err error) {
 			}
 			break
 		}
-
 		explored[n.key] = true
 
 		// loop all the neighboring nodes
@@ -130,10 +129,17 @@ func (g Graph) Path(start, target string) (path []string, cost int, err error) {
 				continue
 			}
 
-			// TODO add check for length of move strek
 			if _, ok := frontier.Get(nKey); !ok {
 				previous[nKey] = n.key
 				frontier.Set(nKey, n.cost+nCost)
+				continue
+			}
+
+			// if violating rule, skip this node as candidate
+			if isViolatingRule(nKey, previous) {
+				fmt.Printf("Skipping node: %v\n", nKey)
+				delete(previous, nKey)
+				explored[nKey] = true
 				continue
 			}
 
@@ -145,6 +151,7 @@ func (g Graph) Path(start, target string) (path []string, cost int, err error) {
 				frontier.Set(nKey, nodeCost)
 			}
 		}
+
 	}
 
 	// add the origin at the end of the path
@@ -193,7 +200,7 @@ func isViolatingRule(node string, prev map[string]string) bool {
 	}
 
 	if cnt1 > MAX_STRAIGHT || cnt2 > MAX_STRAIGHT {
-		//fmt.Printf("Found violation at node: %v, %v, %d, %d\n", node, keys, cnt2, cnt1)
+		fmt.Printf("Found violation at node: %v, %v, %d, %d\n", node, keys, cnt2, cnt1)
 		return true
 	}
 
