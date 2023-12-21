@@ -5,9 +5,10 @@
 // This was created using copilot to assist me in learning Go.
 //
 // Scenario:
-//   We're in a garden at position S, and we want to walk a given number
-//   of steps. We can tiles in the garden marked as '.', but can not step on
-//   tiles marked as '#'. What we visited we mark as 'O'.
+//
+//	We're in a garden at position S, and we want to walk a given number
+//	of steps. We can tiles in the garden marked as '.', but can not step on
+//	tiles marked as '#'. What we visited we mark as 'O'.
 //
 // Part 1: How many tiles did we visit with 64 steps
 // Part 2:
@@ -59,21 +60,19 @@ func printGarden(g [][]byte) {
 	fmt.Printf("\n\n")
 }
 
-func getStartPos() Position {
+func getStartPos(g [][]byte) Position {
 	var pos Position
 	for i := 0; i < ROWS; i++ {
 		for j := 0; j < COLS; j++ {
-			if garden[i][j] == 'S' {
+			if g[i][j] == 'S' {
 				pos.row = i
 				pos.col = j
 				return pos
 			}
 		}
 	}
-	return pos
+	panic("Start not found")
 }
-
-// -------------------------- Puzzle part 1 ----------------------------------
 
 func countVisitedTiles(g [][]byte) int {
 	var result int = 0
@@ -85,18 +84,6 @@ func countVisitedTiles(g [][]byte) int {
 		}
 	}
 	return result
-}
-
-// creates a copy of the passed 2d array
-func copyGarden(g [][]byte) [][]byte {
-	copy := make([][]byte, len(g))
-	for i := 0; i < len(g); i++ {
-		copy[i] = make([]byte, len(g[i]))
-		for j := 0; j < len(copy[i]); j++ {
-			copy[i][j] = g[i][j]
-		}
-	}
-	return copy
 }
 
 func containsPosition(slice []Position, target Position) bool {
@@ -112,12 +99,11 @@ func isValidPosition(pos Position) bool {
 	return pos.row >= 0 && pos.row < ROWS && pos.col >= 0 && pos.col < COLS
 }
 
-func walk(g [][]byte, queue []Position) []Position {
-	var nextLevel []Position
+func nextLevelPositions(g [][]byte, queue []Position) []Position {
+	nextLevelMap := make(map[Position]struct{})
 
-	for len(queue) > 0 {
-		currPos := queue[0]
-		queue = queue[1:]
+	for x := 0; x < len(queue); x++ {
+		currPos := queue[x]
 
 		// Check if the current position is a valid tile to visit
 		if g[currPos.row][currPos.col] != '#' {
@@ -132,16 +118,18 @@ func walk(g [][]byte, queue []Position) []Position {
 
 			for _, neighbor := range neighbors {
 				if isValidPosition(neighbor) && g[neighbor.row][neighbor.col] != '#' {
-					// check if nextLevel already contains neighbor
-					if !containsPosition(nextLevel, neighbor) {
-						nextLevel = append(nextLevel, neighbor)
-					}
+					nextLevelMap[neighbor] = struct{}{}
 				}
 			}
 		} else {
 			panic("Illegal state")
 		}
 
+	}
+
+	var nextLevel []Position
+	for pos := range nextLevelMap {
+		nextLevel = append(nextLevel, pos)
 	}
 	return nextLevel
 }
@@ -151,38 +139,102 @@ func bfsGardenWalk(g [][]byte, pos Position, depth int) [][]byte {
 
 	queue = append(queue, pos)
 	for len(queue) > 0 && depth > 0 {
-		nextLevelQueue := walk(g, queue)
-		fmt.Printf("nextLevelQueue %v\n", nextLevelQueue)
-		queue = nextLevelQueue
+		queue = nextLevelPositions(g, queue)
 		depth--
 	}
 
-	// mark last level
+	// at this level our queue holds the actual positions, mark it
 	for len(queue) > 0 {
 		currPos := queue[0]
 		queue = queue[1:]
-		g[currPos.row][currPos.col] = 'O' // Mark as visited
+		g[currPos.row][currPos.col] = 'O'
 	}
 
 	return g
 }
 
+// -------------------------- Puzzle part 1 ----------------------------------
+
 var stepsPart1 int = 64 // 6 for test data, 64 for actual data
 
 func SolvePart1() int {
-	pos := getStartPos()
-	fmt.Println("Start position:", pos)
-	printGarden(garden)
-	g := bfsGardenWalk(copyGarden(garden), pos, stepsPart1)
-	printGarden(g)
+	pos := getStartPos(garden)
+	g := bfsGardenWalk(garden, pos, stepsPart1)
+	//printGarden(g)
 	result := countVisitedTiles(g)
 	return result
 }
 
 // -------------------------- Puzzle part 2 ----------------------------------
 
+// altough passed by reference go copies the a slice if it gets expanded
+// only works on uneven multiply for start point calc
+func expandMap(g [][]byte, factor int) ([][]byte, Position) {
+	pos := getStartPos(g)
+	g[pos.row][pos.col] = '.'
+
+	// multiply length of each row by factor
+	for r := 0; r < ROWS; r++ {
+		row := g[r]
+		for f := 0; f < factor-1; f++ {
+			g[r] = append(g[r], row...)
+		}
+	}
+	// append rows by factor
+	for j := 0; j < factor-1; j++ {
+		for y := 0; y < ROWS; y++ {
+			g = append(g, g[y])
+		}
+	}
+
+	// update start position
+	half := factor / 2
+	pos.row = pos.row + half*ROWS
+	pos.col = pos.col + half*COLS
+	g[pos.row][pos.col] = 'S'
+
+	ROWS = len(g)
+	COLS = len(g[0])
+
+	return g, pos
+}
+
+func copy2DSlice(src [][]byte) [][]byte {
+	dst := make([][]byte, len(src))
+	for i, row := range src {
+		newRow := make([]byte, len(row))
+		copy(newRow, row)
+		dst[i] = newRow
+	}
+	return dst
+}
+
 func SolvePart2() int {
-	var result int = 0
+	full := ROWS
+	half := full / 2
+
+	largeMap, pos := expandMap(garden, 5)
+	largeMap_clean := copy2DSlice(largeMap)
+
+	g1 := bfsGardenWalk(copy2DSlice(largeMap_clean), pos, half)
+	t1 := countVisitedTiles(g1)
+	fmt.Printf("t1: %d\n", t1)
+
+	g2 := bfsGardenWalk(copy2DSlice(largeMap_clean), pos, half+full)
+	t2 := countVisitedTiles(g2)
+	fmt.Printf("t2: %d\n", t2)
+
+	g3 := bfsGardenWalk(copy2DSlice(largeMap_clean), pos, half+2*full)
+	t3 := countVisitedTiles(g3)
+	fmt.Printf("t3: %d\n", t3)
+
+	// with help from reddit - extrapolate with
+	// Lagrange's Interpolation formula
+	a := (t3 + t1 - 2*t2) / 2
+	b := t2 - t1 - a
+	c := t1
+	n := 26501365 / full
+	result := a*n*n + b*n + c
 
 	return result
 }
@@ -203,6 +255,8 @@ func main() {
 
 	inputToGarden(input)
 	result1 := SolvePart1()
+
+	inputToGarden(input)
 	result2 := SolvePart2()
 	stopwatch.Stop()
 
