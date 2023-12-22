@@ -24,9 +24,9 @@
 package main
 
 import (
+	"container/heap"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/cdr74/AdventOfCode2023/utils"
@@ -41,211 +41,239 @@ const DATA_FILE string = "actual.data"
 
 const MAX_STRAIGHT = 3
 
-var field [][]byte
+var heatLoss [][]int
 var ROWS int
 var COLS int
+
+type Position struct {
+	r int
+	c int
+}
+
+type Direction int
+
+const (
+	NORTH Direction = iota
+	EAST
+	SOUTH
+	WEST
+)
+
+// -------------------------- Queue Shit -------------------------------------
+
+// PriorityQueue implements heap.Interface and holds States.
+type PriorityQueue []*State
+
+func (pq PriorityQueue) Len() int { return len(pq) }
+
+func (pq PriorityQueue) Less(i, j int) bool {
+	// TODO what's the correct evaluation including streaks?
+
+	if pq[i].heatLoss == pq[j].heatLoss {
+		return pq[i].streak < pq[j].streak
+	}
+	return pq[i].heatLoss < pq[j].heatLoss
+
+	// alternative weight calculation
+	//return pq[i].heatLoss+pq[i].streak < pq[j].heatLoss+pq[j].streak
+}
+
+func (pq PriorityQueue) Swap(i, j int) { pq[i], pq[j] = pq[j], pq[i] }
+
+func (pq *PriorityQueue) Push(x interface{}) {
+	item := x.(*State)
+	*pq = append(*pq, item)
+}
+
+func (pq *PriorityQueue) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	item := old[n-1]
+	*pq = old[0 : n-1]
+	return item
+}
+
+type StateQueue struct {
+	pq PriorityQueue
+}
+
+func NewStateQueue() *StateQueue {
+	return &StateQueue{pq: make(PriorityQueue, 0)}
+}
+
+func (q *StateQueue) Enqueue(state *State) {
+	heap.Push(&q.pq, state)
+}
+
+func (q *StateQueue) Dequeue() *State {
+	if len(q.pq) == 0 {
+		return nil
+	}
+	return heap.Pop(&q.pq).(*State)
+}
 
 // -------------------------- Common Code Section ----------------------------
 
 func inputLineToValues(input []string) {
 	ROWS = len(input)
 	COLS = len(input[0])
-	field = make([][]byte, ROWS)
-	for i := range field {
-		field[i] = make([]byte, COLS)
+	heatLoss = make([][]int, ROWS)
+	for i := range heatLoss {
+		heatLoss[i] = make([]int, COLS)
 	}
 
 	for r, line := range input {
 		for c, char := range line {
-			field[r][c] = byte(char) - byte('0')
+			heatLoss[r][c] = int(char) - int('0')
 		}
 	}
-}
-
-func printField(r_crucible int, c_crucible int) {
-	for r := 0; r < ROWS; r++ {
-		for c := 0; c < COLS; c++ {
-			if r == r_crucible && c == c_crucible {
-				fmt.Print(" ")
-			} else {
-				fmt.Print(field[r][c])
-			}
-		}
-		fmt.Println()
-	}
-	fmt.Println()
 }
 
 // -------------------------- Puzzle part 1 ----------------------------------
 
-func printFieldWithDistances(dist map[string]int) {
+type State struct {
+	position Position
+	heatLoss int
+	path     []Position
+	dir      Direction
+	streak   int
+}
+
+var accumulatedHeatLoss [][]State
+
+func getNextValidMoves(currentState *State) []Position {
+	MAX_STREAK := 3
+	var validMoves []Position
+	pos := currentState.position
+
+	neighbors := []Position{{pos.r - 1, pos.c}, {pos.r, pos.c + 1}, {pos.r + 1, pos.c}, {pos.r, pos.c - 1}}
+	if currentState.dir == NORTH && currentState.streak >= MAX_STREAK {
+		neighbors = neighbors[1:] // remove this
+	}
+	if currentState.dir == EAST && currentState.streak >= MAX_STREAK {
+		neighbors = append(neighbors[:1], neighbors[2:]...) // remove this
+	}
+	if currentState.dir == SOUTH && currentState.streak >= MAX_STREAK {
+		neighbors = append(neighbors[:2], neighbors[3:]...) // remove this
+	}
+	if currentState.dir == WEST && currentState.streak >= MAX_STREAK {
+		neighbors = neighbors[:3] // remove this
+	}
+
+	for _, neighbor := range neighbors {
+		if neighbor.r >= 0 && neighbor.r < ROWS && neighbor.c >= 0 && neighbor.c < COLS {
+			if len(currentState.path) > 0 {
+				lastPosition := currentState.path[len(currentState.path)-1]
+				if neighbor == lastPosition {
+					// do not go back to the previous position
+					continue
+				}
+			}
+			validMoves = append(validMoves, neighbor)
+		}
+	}
+	return validMoves
+}
+
+func getDirection(currentPos Position, nextPos Position) Direction {
+	if nextPos.r < currentPos.r {
+		return NORTH
+	}
+	if nextPos.c > currentPos.c {
+		return EAST
+	}
+	if nextPos.r > currentPos.r {
+		return SOUTH
+	}
+	if nextPos.c < currentPos.c {
+		return WEST
+	}
+	return NORTH
+}
+
+func exploreBFSStyle(start Position, end Position) int {
+	accumulatedHeatLoss = make([][]State, ROWS)
+	for i := range accumulatedHeatLoss {
+		accumulatedHeatLoss[i] = make([]State, COLS)
+	}
+
+	// initialize the queue
+	queue := NewStateQueue()
 	for r := 0; r < ROWS; r++ {
 		for c := 0; c < COLS; c++ {
-			key := fmt.Sprintf("%d-%d", r, c)
-			if dist[key] == math.MaxInt32 {
-				fmt.Printf("XXXXX\t")
-			} else {
-				fmt.Printf("%d\t", dist[key])
+			state := State{
+				position: Position{r, c},
+				heatLoss: math.MaxInt32,
+				path:     make([]Position, 0),
+				dir:      EAST, streak: 0,
 			}
+			if r == start.r && c == start.c {
+				state.heatLoss = 0
+			}
+			accumulatedHeatLoss[r][c] = state
 		}
-		fmt.Println()
 	}
-	fmt.Println()
-}
+	queue.Enqueue(&accumulatedHeatLoss[start.r][start.c])
 
-type node struct {
-	key  string
-	cost int
-}
+	for queue.pq.Len() > 0 {
+		currentState := queue.Dequeue()
+		if currentState.heatLoss > accumulatedHeatLoss[currentState.position.r][currentState.position.c].heatLoss {
+			// we already found a shorter path to here, skip to next
+			continue
+		}
+		fmt.Printf("Exploring %v --- %v\n", currentState.position, currentState.path)
 
-type Graph map[string]map[string]int
-
-func (g Graph) Path(start, target string) (path []string, cost int, err error) {
-	explored := make(map[string]bool)   // set of nodes we already explored
-	frontier := utils.NewQueue()        // queue of the nodes to explore
-	previous := make(map[string]string) // previously visited node
-
-	frontier.Set(start, 0)
-
-	// run until we visited every node in the frontier
-	for !frontier.IsEmpty() {
-		aKey, aPriority := frontier.Next()
-		n := node{aKey, aPriority}
-
-		if n.key == target {
-			cost = n.cost
-			nKey := n.key
-			for nKey != start {
-				path = append(path, nKey)
-				nKey = previous[nKey]
-			}
+		if currentState.position == end {
+			// TODO: question - stop or not at first solution?
 			break
-		}
-		explored[n.key] = true
+		} else {
+			// explore all possible moves
+			moveList := getNextValidMoves(currentState)
+			currentPos := currentState.position
+			for _, move := range moveList {
+				// did we find a path with less heat loss to the position indicated by move?
+				tmpHeatLoss := accumulatedHeatLoss[currentPos.r][currentPos.c].heatLoss + heatLoss[move.r][move.c]
 
-		// loop all the neighboring nodes
-		for nKey, nCost := range g[n.key] {
-			if explored[nKey] {
-				continue
-			}
+				// --------------------------------------------------------------------------------------
+				// XXX Equal length might be relevant because of streak >> can't overwrite current state
+				// --------------------------------------------------------------------------------------
+				if tmpHeatLoss <= accumulatedHeatLoss[move.r][move.c].heatLoss {
 
-			if _, ok := frontier.Get(nKey); !ok {
-				previous[nKey] = n.key
-				frontier.Set(nKey, n.cost+nCost)
-				continue
-			}
+					direction := getDirection(currentPos, move)
+					streak := 1
+					if currentState.streak == 0 {
+						// first move, no streak (avoid initialization EAST causes streak)
+					} else {
+						if currentState.dir == direction {
+							streak = currentState.streak + 1
+						}
+					}
 
-			// if violating rule, skip this node as candidate
-			if isViolatingRule(nKey, previous) {
-				fmt.Printf("Skipping node: %v\n", nKey)
-				delete(previous, nKey)
-				explored[nKey] = true
-				continue
-			}
+					tmpState := State{position: move, heatLoss: tmpHeatLoss, dir: direction, streak: streak}
 
-			frontierCost, _ := frontier.Get(nKey)
-			nodeCost := n.cost + nCost
+					tmpState.path = make([]Position, len(currentState.path))
+					copy(tmpState.path, currentState.path)
+					tmpState.path = append(tmpState.path, move)
 
-			if nodeCost < frontierCost {
-				previous[nKey] = n.key
-				frontier.Set(nKey, nodeCost)
-			}
-		}
+					accumulatedHeatLoss[move.r][move.c].path = make([]Position, len(tmpState.path))
+					copy(accumulatedHeatLoss[move.r][move.c].path, tmpState.path)
 
-	}
-
-	// add the origin at the end of the path
-	path = append(path, start)
-
-	// reverse the path because it was popilated
-	// in reverse, form target to start
-	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
-		path[i], path[j] = path[j], path[i]
-	}
-
-	return
-}
-
-// no n moves in straight line
-func isViolatingRule(node string, prev map[string]string) bool {
-	var keys []string
-	first_col := -1
-	first_row := -1
-	cnt1 := 0
-	cnt2 := 0
-
-	currentKey := node
-	for i := 0; i <= MAX_STRAIGHT; i++ {
-		keys = append(keys, currentKey)
-		if len(currentKey) < 3 {
-			return false
-		}
-
-		idx := strings.Index(currentKey, "-")
-		col := utils.StringToInt(currentKey[:idx])
-		row := utils.StringToInt(currentKey[idx+1:])
-
-		if i == 0 {
-			first_col = col
-			first_row = row
-		}
-		if first_row == row {
-			cnt1++
-		}
-		if first_col == col {
-			cnt2++
-		}
-
-		currentKey = prev[currentKey]
-	}
-
-	if cnt1 > MAX_STRAIGHT || cnt2 > MAX_STRAIGHT {
-		fmt.Printf("Found violation at node: %v, %v, %d, %d\n", node, keys, cnt2, cnt1)
-		return true
-	}
-
-	return false
-}
-
-// type Graph map[string]map[string]int
-//
-//	Graph{
-//		"0-0": {"0-1": 10, "1-0": 20},
-//		"0-1": {"0-2": 50},
-//	}
-func buildGraph() Graph {
-	graph := make(map[string]map[string]int)
-
-	for r := 0; r < ROWS; r++ {
-		for c := 0; c < COLS; c++ {
-			key := fmt.Sprintf("%d-%d", r, c)
-			graph[key] = make(map[string]int)
-
-			if r > 0 {
-				graph[key][fmt.Sprintf("%d-%d", r-1, c)] = int(field[r-1][c])
-			}
-			if c > 0 {
-				graph[key][fmt.Sprintf("%d-%d", r, c-1)] = int(field[r][c-1])
-			}
-			if r < ROWS-1 {
-				graph[key][fmt.Sprintf("%d-%d", r+1, c)] = int(field[r+1][c])
-			}
-			if c < COLS-1 {
-				graph[key][fmt.Sprintf("%d-%d", r, c+1)] = int(field[r][c+1])
+					accumulatedHeatLoss[move.r][move.c].heatLoss = tmpHeatLoss
+					fmt.Printf("  Adding %v ---- %d --- %v\n", move, tmpState.heatLoss, tmpState.path)
+					queue.Enqueue(&tmpState)
+				}
 			}
 		}
 	}
 
-	return graph
+	fmt.Printf("Path: %v\n", accumulatedHeatLoss[end.r][end.c].path)
+	return accumulatedHeatLoss[end.r][end.c].heatLoss
 }
 
 func SolvePart1() int {
-	graph := buildGraph()
-
-	// unmodified dijkstra
-	path, cost, _ := graph.Path("0-0", "12-12")
-	fmt.Printf("Path from 'start' to '12-12' with lowest cost: %v cost: %v\n", path, cost)
-
+	start := Position{0, 0}
+	end := Position{ROWS - 1, COLS - 1}
+	cost := exploreBFSStyle(start, end)
 	return cost
 }
 
@@ -253,7 +281,6 @@ func SolvePart1() int {
 
 func SolvePart2() int {
 	var result int = 0
-
 	return result
 }
 

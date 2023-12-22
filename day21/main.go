@@ -86,15 +86,6 @@ func countVisitedTiles(g [][]byte) int {
 	return result
 }
 
-func containsPosition(slice []Position, target Position) bool {
-	for _, pos := range slice {
-		if pos == target {
-			return true
-		}
-	}
-	return false
-}
-
 func isValidPosition(pos Position) bool {
 	return pos.row >= 0 && pos.row < ROWS && pos.col >= 0 && pos.col < COLS
 }
