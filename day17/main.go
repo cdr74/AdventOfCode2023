@@ -19,7 +19,10 @@
 //	    then turn left or right
 //
 // Part 1: Start top left, destination bottom right
-// Part 2:
+// Part 2: same as part 1, different streak length
+//
+// took inspiration from
+// https://www.reddit.com/r/adventofcode/comments/18luw6q/2023_day_17_a_longform_tutorial_on_day_17/
 // ---------------------------------------------------------------------------
 package main
 
@@ -27,15 +30,17 @@ import (
 	"container/heap"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/cdr74/AdventOfCode2023/utils"
 )
 
 // runTest defines whether test.data or actual.data should be used
-const runTest bool = true
+const runTest bool = false
 const TEST_FILE string = "test.data"
 const DATA_FILE string = "actual.data"
+
+var MAX_STREAK = 10 // set to 3 part 1
+var MIN_STREAK = 4  // set to 1 part 1
 
 // -------------------------- Common Data Section ----------------------------
 
@@ -67,15 +72,7 @@ type PriorityQueue []*State
 func (pq PriorityQueue) Len() int { return len(pq) }
 
 func (pq PriorityQueue) Less(i, j int) bool {
-	// TODO what's the correct evaluation including streaks?
-
-	if pq[i].heatLoss == pq[j].heatLoss {
-		return pq[i].streak < pq[j].streak
-	}
-	return pq[i].heatLoss < pq[j].heatLoss
-
-	// alternative weight calculation
-	//return pq[i].heatLoss+pq[i].streak < pq[j].heatLoss+pq[j].streak
+	return pq[i].streak < pq[j].streak
 }
 
 func (pq PriorityQueue) Swap(i, j int) { pq[i], pq[j] = pq[j], pq[i] }
@@ -133,42 +130,73 @@ func inputLineToValues(input []string) {
 
 type State struct {
 	position Position
-	heatLoss int
-	path     []Position
 	dir      Direction
 	streak   int
 }
 
-var accumulatedHeatLoss [][]State
-
 func getNextValidMoves(currentState *State) []Position {
-	MAX_STREAK := 3
 	var validMoves []Position
+	var neighbors []Position
 	pos := currentState.position
 
-	neighbors := []Position{{pos.r - 1, pos.c}, {pos.r, pos.c + 1}, {pos.r + 1, pos.c}, {pos.r, pos.c - 1}}
-	if currentState.dir == NORTH && currentState.streak >= MAX_STREAK {
-		neighbors = neighbors[1:] // remove this
-	}
-	if currentState.dir == EAST && currentState.streak >= MAX_STREAK {
-		neighbors = append(neighbors[:1], neighbors[2:]...) // remove this
-	}
-	if currentState.dir == SOUTH && currentState.streak >= MAX_STREAK {
-		neighbors = append(neighbors[:2], neighbors[3:]...) // remove this
-	}
-	if currentState.dir == WEST && currentState.streak >= MAX_STREAK {
-		neighbors = neighbors[:3] // remove this
+	// don't go back, don't exceed streak
+	switch currentState.dir {
+	case NORTH:
+		if currentState.streak < MIN_STREAK {
+			// must go north
+			neighbors = []Position{{pos.r - 1, pos.c}}
+		} else {
+			if currentState.streak >= MAX_STREAK {
+				// skip north and south
+				neighbors = []Position{{pos.r, pos.c + 1}, {pos.r, pos.c - 1}}
+			} else {
+				// skip south
+				neighbors = []Position{{pos.r + 1, pos.c}, {pos.r, pos.c + 1}, {pos.r, pos.c - 1}}
+			}
+		}
+	case EAST:
+		if currentState.streak < MIN_STREAK {
+			// must go east
+			neighbors = []Position{{pos.r, pos.c + 1}}
+		} else {
+			if currentState.streak >= MAX_STREAK {
+				// skip east and west
+				neighbors = []Position{{pos.r - 1, pos.c}, {pos.r + 1, pos.c}}
+			} else {
+				// skip west
+				neighbors = []Position{{pos.r - 1, pos.c}, {pos.r, pos.c + 1}, {pos.r + 1, pos.c}}
+			}
+		}
+	case SOUTH:
+		if currentState.streak < MIN_STREAK {
+			// must go south
+			neighbors = []Position{{pos.r + 1, pos.c}}
+		} else {
+			if currentState.streak >= MAX_STREAK {
+				// skip north and south
+				neighbors = []Position{{pos.r, pos.c + 1}, {pos.r, pos.c - 1}}
+			} else {
+				// skip north
+				neighbors = []Position{{pos.r, pos.c + 1}, {pos.r + 1, pos.c}, {pos.r, pos.c - 1}}
+			}
+		}
+	case WEST:
+		if currentState.streak < MIN_STREAK {
+			// must go west
+			neighbors = []Position{{pos.r, pos.c - 1}}
+		} else {
+			if currentState.streak >= MAX_STREAK {
+				// skip east and west
+				neighbors = []Position{{pos.r - 1, pos.c}, {pos.r + 1, pos.c}}
+			} else {
+				// skip east
+				neighbors = []Position{{pos.r - 1, pos.c}, {pos.r + 1, pos.c}, {pos.r, pos.c - 1}}
+			}
+		}
 	}
 
 	for _, neighbor := range neighbors {
 		if neighbor.r >= 0 && neighbor.r < ROWS && neighbor.c >= 0 && neighbor.c < COLS {
-			if len(currentState.path) > 0 {
-				lastPosition := currentState.path[len(currentState.path)-1]
-				if neighbor == lastPosition {
-					// do not go back to the previous position
-					continue
-				}
-			}
 			validMoves = append(validMoves, neighbor)
 		}
 	}
@@ -191,106 +219,84 @@ func getDirection(currentPos Position, nextPos Position) Direction {
 	return NORTH
 }
 
-func exploreBFSStyle(start Position, end Position) int {
-	accumulatedHeatLoss = make([][]State, ROWS)
-	for i := range accumulatedHeatLoss {
-		accumulatedHeatLoss[i] = make([]State, COLS)
+func lowestCostInStateQueue(stateQueueByCost map[int]*StateQueue) int {
+	var lowestCost int = math.MaxInt32
+	for cost := range stateQueueByCost {
+		if cost < lowestCost && len(stateQueueByCost[cost].pq) > 0 {
+			lowestCost = cost
+		}
 	}
+	return lowestCost
+}
 
-	// initialize the queue
+func findPath(start Position, end Position) int {
+	stateQueueByCost := make(map[int]*StateQueue)
+	costByStateCache := make(map[State]int)
+
+	startEast := State{position: Position{0, 0}, dir: EAST, streak: 1}
+	startSouth := State{position: Position{0, 0}, dir: SOUTH, streak: 1}
+
+	costByStateCache[startEast] = 0
+	costByStateCache[startSouth] = 0
+
 	queue := NewStateQueue()
-	for r := 0; r < ROWS; r++ {
-		for c := 0; c < COLS; c++ {
-			state := State{
-				position: Position{r, c},
-				heatLoss: math.MaxInt32,
-				path:     make([]Position, 0),
-				dir:      EAST, streak: 0,
-			}
-			if r == start.r && c == start.c {
-				state.heatLoss = 0
-			}
-			accumulatedHeatLoss[r][c] = state
-		}
-	}
-	queue.Enqueue(&accumulatedHeatLoss[start.r][start.c])
+	queue.Enqueue(&startEast)
+	queue.Enqueue(&startSouth)
 
-	for queue.pq.Len() > 0 {
-		currentState := queue.Dequeue()
-		if currentState.heatLoss > accumulatedHeatLoss[currentState.position.r][currentState.position.c].heatLoss {
-			// we already found a shorter path to here, skip to next
-			continue
-		}
-		fmt.Printf("Exploring %v --- %v\n", currentState.position, currentState.path)
+	stateQueueByCost[0] = queue
 
-		if currentState.position == end {
-			// TODO: question - stop or not at first solution?
-			break
-		} else {
-			// explore all possible moves
-			moveList := getNextValidMoves(currentState)
-			currentPos := currentState.position
-			for _, move := range moveList {
-				// did we find a path with less heat loss to the position indicated by move?
-				tmpHeatLoss := accumulatedHeatLoss[currentPos.r][currentPos.c].heatLoss + heatLoss[move.r][move.c]
+	for {
+		lowestCost := lowestCostInStateQueue(stateQueueByCost)
+		queue := stateQueueByCost[lowestCost]
 
-				// --------------------------------------------------------------------------------------
-				// XXX Equal length might be relevant because of streak >> can't overwrite current state
-				// --------------------------------------------------------------------------------------
-				if tmpHeatLoss <= accumulatedHeatLoss[move.r][move.c].heatLoss {
+		for len(queue.pq) > 0 {
+			currentState := queue.Dequeue()
 
-					direction := getDirection(currentPos, move)
+			if currentState.position == end && currentState.streak >= MIN_STREAK {
+				// TODO: don't break yet, test all other paths with same length
+				fmt.Printf("Current state: %v\n", currentState)
+				fmt.Printf("Heat loss: %v\n", lowestCost)
+				return lowestCost
+			} else {
+				// explore all possible moves
+				moveList := getNextValidMoves(currentState)
+				for _, move := range moveList {
+
+					// create next state
+					direction := getDirection(currentState.position, move)
 					streak := 1
-					if currentState.streak == 0 {
-						// first move, no streak (avoid initialization EAST causes streak)
-					} else {
-						if currentState.dir == direction {
-							streak = currentState.streak + 1
-						}
+					if currentState.dir == direction {
+						streak = currentState.streak + 1
 					}
+					tmpHeatLoss := lowestCost + heatLoss[move.r][move.c]
+					tmpState := State{position: move, dir: direction, streak: streak}
 
-					tmpState := State{position: move, heatLoss: tmpHeatLoss, dir: direction, streak: streak}
+					if _, exists := costByStateCache[tmpState]; !exists {
+						costByStateCache[tmpState] = tmpHeatLoss
 
-					tmpState.path = make([]Position, len(currentState.path))
-					copy(tmpState.path, currentState.path)
-					tmpState.path = append(tmpState.path, move)
-
-					accumulatedHeatLoss[move.r][move.c].path = make([]Position, len(tmpState.path))
-					copy(accumulatedHeatLoss[move.r][move.c].path, tmpState.path)
-
-					accumulatedHeatLoss[move.r][move.c].heatLoss = tmpHeatLoss
-					fmt.Printf("  Adding %v ---- %d --- %v\n", move, tmpState.heatLoss, tmpState.path)
-					queue.Enqueue(&tmpState)
+						if _, exists := stateQueueByCost[tmpHeatLoss]; !exists {
+							stateQueueByCost[tmpHeatLoss] = NewStateQueue()
+						}
+						queueByCost := stateQueueByCost[tmpHeatLoss]
+						queueByCost.Enqueue(&tmpState)
+					}
 				}
 			}
 		}
 	}
-
-	fmt.Printf("Path: %v\n", accumulatedHeatLoss[end.r][end.c].path)
-	return accumulatedHeatLoss[end.r][end.c].heatLoss
 }
 
 func SolvePart1() int {
 	start := Position{0, 0}
 	end := Position{ROWS - 1, COLS - 1}
-	cost := exploreBFSStyle(start, end)
+	cost := findPath(start, end)
 	return cost
-}
-
-// -------------------------- Puzzle part 2 ----------------------------------
-
-func SolvePart2() int {
-	var result int = 0
-	return result
 }
 
 // -------------------------- Main entry -------------------------------------
 
 func main() {
 	var input []string
-
-	stopwatch := utils.NewStopwatch()
-	stopwatch.Start()
 
 	if runTest {
 		input = utils.ReadDataFile(TEST_FILE)
@@ -299,15 +305,9 @@ func main() {
 	}
 
 	inputLineToValues(input)
-
 	result1 := SolvePart1()
-	result2 := SolvePart2()
-	stopwatch.Stop()
 
 	// ---------------------- Print results ----------------------------------
-	var elapsedTime time.Duration = stopwatch.GetElapsedTime()
 	fmt.Println("Running as test:\t", runTest)
 	fmt.Println("Result 1:\t\t", result1)
-	fmt.Println("Result 2:\t\t", result2)
-	fmt.Println("Elapsed time:\t\t", elapsedTime)
 }
