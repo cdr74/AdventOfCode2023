@@ -38,7 +38,7 @@ import (
 )
 
 // runTest defines whether test.data or actual.data should be used
-const runTest bool = true
+const runTest bool = false
 const TEST_FILE string = "test.data"
 const DATA_FILE string = "actual.data"
 
@@ -251,74 +251,73 @@ func combinationsOfStatusRange(sr map[Status]Range) int {
 	return mult
 }
 
-func traverseWorkflow(rule string, statusRanges map[Status]Range, result *[]int) {
-	fmt.Printf("Rule: %v, %v, %d\n", rule, statusRanges, combinationsOfStatusRange(statusRanges))
+func statusValid(sr map[Status]Range) bool {
+	for _, rng := range sr {
+		if rng.min >= rng.max {
+			return false
+		}
+	}
+	return true
+}
 
-	if rule == "A" {
-		fmt.Printf("Rule: %v, %v\n", rule, statusRanges)
+func traverseWorkflow(ruleName string, statusRanges map[Status]Range, result *[]int) {
+	fmt.Printf("Processing rule: %v,\tRanges %v,Possibilities\t%d\n", ruleName, statusRanges, combinationsOfStatusRange(statusRanges))
+
+	// accepted
+	if ruleName == "A" {
 		mult := combinationsOfStatusRange(statusRanges)
 		*result = append(*result, mult)
 		return
 	}
 
-	if rule == "R" {
-		// discard
+	// rejected, discard
+	if ruleName == "R" || !statusValid(statusRanges) {
+		fmt.Println("Rejected")
 		return
 	}
 
-	r := getRuleByName(rule)
-	orgSR := cloneStatusRanges(statusRanges)
-	for _, condition := range r.conditions {
+	rule := getRuleByName(ruleName)
+	for _, condition := range rule.conditions {
 		if condition.name == "" {
+			// last condition has no name or attribute
 			break
 		}
 
 		for status, rng := range statusRanges {
 			if condition.name == status.String() {
+				tmp := rng
+				// adjust range for current condition
 				switch condition.op {
 				case "<":
-					if condition.value < rng.max {
-						rng.max = condition.value - 1
-					}
+					rng.max = condition.value - 1
 				case ">":
-					if condition.value > rng.min {
-						rng.min = condition.value + 1
-					}
+					rng.min = condition.value + 1
 				}
 				statusRanges[status] = rng
 				traverseWorkflow(condition.target, cloneStatusRanges(statusRanges), result)
-			}
-		}
-	}
 
-	// last condition has no attribute; this is an alternative path
-	// SR needs be updated inverse
-	for _, condition := range r.conditions {
-		for status, rng := range orgSR {
-			if condition.name == status.String() {
+				// now inverse this scope change, for next condition to continue
+				rng = tmp
 				switch condition.op {
 				case "<":
-					if condition.value > rng.min {
-						rng.min = condition.value
-					}
+					rng.min = condition.value
 				case ">":
-					if condition.value < rng.max {
-						rng.max = condition.value
-					}
+					rng.max = condition.value
 				}
+				statusRanges[status] = rng
 			}
-			orgSR[status] = rng
 		}
 	}
 
-	traverseWorkflow(r.getUnconditionalState(), cloneStatusRanges(orgSR), result)
+	// last condition has no attribute; this is an alternative path, we already inversed condition
+	traverseWorkflow(rule.getUnconditionalState(), cloneStatusRanges(statusRanges), result)
 }
 
 // find the range of possible inputs for all 4 attributes then multiply out the ranges
 func SolvePart2() int64 {
 	var result []int
 	traverseWorkflow("in", statusRanges, &result)
-	// multiply length of ranges
+	// add up length of ranges
 	var summ int64
 	for _, r := range result {
 		summ += int64(r)
